@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import nengo
-from nengo.utils.distributions import Uniform, UniformHypersphere
+from nengo.dists import Uniform, UniformHypersphere
 
 N = 3
 radius = 5
@@ -18,11 +18,9 @@ def sigmoid_radius(x):
 
 def encoders_rates_intercepts(seed):
     rng = np.random.RandomState(seed)
-    # encoders = UniformHypersphere(1, surface=True).sample(N, rng)
-    # intercepts = Uniform(-1, 1).sample(N, rng)
     encoders = np.ones((N, 1))
-    intercepts = Uniform(-0.5, 0.8).sample(N, rng)
-    max_rates = Uniform(200, 400).sample(N, rng)
+    intercepts = Uniform(-0.5, 0.8).sample(N, rng=rng)
+    max_rates = Uniform(200, 400).sample(N, rng=rng)
     return encoders, max_rates, intercepts
 
 
@@ -32,7 +30,7 @@ def residual(encoders, max_rates, intercepts, eval_points, show=False):
     gains, biases = neurons.gain_bias(max_rates, intercepts)
     A = neurons.rates(np.dot(eval_points, encoders.T), gains, biases)
     y = sigmoid_radius(eval_points)
-    d = nengo.decoders.lstsq_L2nz(A, y)
+    d, _ = nengo.solvers.LstsqL2()(A, y)
     r = np.dot(A, d) - y
     r2 = np.sqrt(np.dot(r.T, r))
 
@@ -51,7 +49,7 @@ def residual(encoders, max_rates, intercepts, eval_points, show=False):
 
 def find_params(savefile=None, show=False):
     rng = np.random.RandomState(9)
-    eval_points = UniformHypersphere(1).sample(750, rng)
+    eval_points = UniformHypersphere().sample(750, 1, rng=rng)
 
     residuals = []
     for i in range(1000):

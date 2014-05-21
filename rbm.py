@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 plt.ion()
 
 import nengo
-from nengo.utils.distributions import Uniform, UniformHypersphere
+from nengo.dists import Choice
 
 import find_neuron_params
 import mnist
@@ -43,7 +43,6 @@ def test_dots(t, dots):
 # --- load the RBM data
 rbm_file = 'rbm.npz'
 if not os.path.exists(rbm_file):
-    # urllib.urlretrieve("http://api.figshare.com/v1/articles/985599", rbm_file)
     urllib.urlretrieve("http://files.figshare.com/1448053/rbm.npz", rbm_file)
 
 rbm = np.load(rbm_file)
@@ -73,10 +72,14 @@ vocab_codes /= norm(vocab_codes, axis=1, keepdims=True)
 # --- find good neuron parameters
 neuron_params_file = 'neuron_params.npz'
 if not os.path.exists(neuron_params_file):
-    find_neuron_params.find_params(savefile=neuron_params_file, show=False)
+    find_neuron_params.find_params(savefile=neuron_params_file)
 
+# --- load and format neuron params
 neuron_params = dict(np.load(neuron_params_file))
 N = neuron_params.pop('N')
+for p in ['encoders', 'max_rates', 'intercepts']:
+    neuron_params[p] = Choice(neuron_params[p])
+neuron_params['radius'] = neuron_params['radius'].item()
 
 # --- create the model
 model = nengo.Network()
@@ -87,28 +90,27 @@ with model:
     layers = []
     output = input_images
     for w, b in zip(weights[:-1], biases[:-1]):
-        layer = nengo.networks.EnsembleArray(
-            nengo.LIF(N), b.size, **neuron_params)
+        layer = nengo.networks.EnsembleArray(N, b.size, **neuron_params)
         bias = nengo.Node(output=b)
-        nengo.Connection(bias, layer.input, filter=0)
+        nengo.Connection(bias, layer.input, synapse=0)
 
-        nengo.Connection(output, layer.input, transform=w.T, filter=pstc)
+        nengo.Connection(output, layer.input, transform=w.T, synapse=pstc)
         output = layer.add_output('sigmoid', function=sigmoid)
 
         layers.append(layer)
 
     # --- make code layer
     w, b = weights[-1], biases[-1]
-    code = nengo.networks.EnsembleArray(nengo.LIF(Ncode), b.size)
+    code = nengo.networks.EnsembleArray(Ncode, b.size)
     bias = nengo.Node(output=b)
-    nengo.Connection(bias, code.input, filter=0)
-    nengo.Connection(output, code.input, transform=w.T, filter=pstc)
+    nengo.Connection(bias, code.input, synapse=0)
+    nengo.Connection(output, code.input, transform=w.T, synapse=pstc)
 
     # --- make cleanup
     n_labels, n_codes = vocab_codes.shape
     dots = nengo.Node(output=lambda t, x: np.dot(vocab_codes, x),
                       size_in=n_codes, size_out=n_labels)
-    nengo.Connection(code.output, dots, filter=0.01)
+    nengo.Connection(code.output, dots, synapse=0.01)
 
     test = nengo.Node(output=test_dots, size_in=n_labels)
     nengo.Connection(dots, test)
@@ -164,3 +166,8 @@ plt.xlabel('time [s]')
 plt.ylabel('correct')
 
 plt.savefig('runtime.png')
+
+# --- compute error rate
+zblocks = z.reshape(-1, 100)[:, 50:]  # 50 ms blocks at end of each 100
+errors = np.mean(zblocks, axis=1) < 0.5
+print "Error rate:", errors.mean()
