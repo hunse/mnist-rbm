@@ -33,10 +33,10 @@ def forward(x, weights, biases):
     return x
 
 def get_image(t):
-    return test_images[int(t / presentation_time)]
+    return test_images[int(t / presentation_time) % len(test_images)]
 
 def test_dots(t, dots):
-    i = int(t / presentation_time)
+    i = int(t / presentation_time) % len(test_images)
     j = np.argmax(dots)
     return test_labels[i] == vocab_labels[j]
 
@@ -50,9 +50,9 @@ weights = rbm['weights']
 biases = rbm['biases']
 
 # --- load the testing data
-[test_set] = mnist.load_data(train=False, valid=False, test=True)
-test_images = test_set[0]
-test_labels = test_set[1]
+[train_set, test_set] = mnist.load_data(train=True, valid=False, test=True)
+train_images, train_labels = train_set
+test_images, test_labels = test_set
 
 # shuffle
 rng = np.random.RandomState(92)
@@ -61,13 +61,19 @@ test_images = test_images[inds]
 test_labels = test_labels[inds]
 
 # --- find average semantic pointers (codes) for each label
-test_codes = forward(test_images, weights, biases)
-vocab_labels = np.unique(test_labels)
-vocab_codes = np.zeros((len(vocab_labels), test_codes.shape[-1]))
+train_codes = forward(train_images, weights, biases)
+vocab_labels = np.unique(train_labels)
+vocab_codes = np.zeros((len(vocab_labels), train_codes.shape[-1]))
 for i, label in enumerate(vocab_labels):
-    vocab_codes[i] = test_codes[test_labels.flatten() == label].mean(0)
+    vocab_codes[i] = train_codes[train_labels.flatten() == label].mean(0)
 
 vocab_codes /= norm(vocab_codes, axis=1, keepdims=True)
+
+# --- ANN accuracy on test set
+test_codes = forward(test_images, weights, biases)
+ann_labels = np.dot(test_codes, vocab_codes.T)
+ann_errors = (np.argmax(ann_labels, axis=1) != test_labels)
+print("ANN error: %s" % ann_errors.mean())
 
 # --- find good neuron parameters
 neuron_params_file = 'neuron_params.npz'
@@ -121,8 +127,13 @@ with model:
 # --- simulation
 rundata_file = 'rundata.npz'
 if not os.path.exists(rundata_file):
+    print("Starting build...")
     sim = nengo.Simulator(model)
-    sim.run(1.)
+
+    print("Starting run...")
+    sim.run(10 * presentation_time)
+    # sim.run(1000 * presentation_time)
+    # sim.run(len(test_images) * presentation_time)
 
     t = sim.trange()
     y = sim.data[probe_dots]
@@ -170,4 +181,4 @@ plt.savefig('runtime.png')
 # --- compute error rate
 zblocks = z.reshape(-1, 100)[:, 50:]  # 50 ms blocks at end of each 100
 errors = np.mean(zblocks, axis=1) < 0.5
-print "Error rate:", errors.mean()
+print("Error rate: %s" % errors.mean())

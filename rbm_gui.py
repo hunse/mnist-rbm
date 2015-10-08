@@ -31,10 +31,10 @@ def forward(x, weights, biases):
     return x
 
 def get_image(t):
-    return test_images[int(t / presentation_time)]
+    return test_images[int(t / presentation_time) % len(test_images)]
 
 def test_dots(t, dots):
-    i = int(t / presentation_time)
+    i = int(t / presentation_time) % len(test_images)
     j = np.argmax(dots)
     return test_labels[i] == vocab_labels[j]
 
@@ -48,9 +48,9 @@ weights = rbm['weights']
 biases = rbm['biases']
 
 # --- load the testing data
-[test_set] = mnist.load_data(train=False, valid=False, test=True)
-test_images = test_set[0]
-test_labels = test_set[1]
+[train_set, test_set] = mnist.load_data(train=True, valid=False, test=True)
+train_images, train_labels = train_set
+test_images, test_labels = test_set
 
 # shuffle
 rng = np.random.RandomState(92)
@@ -59,11 +59,11 @@ test_images = test_images[inds]
 test_labels = test_labels[inds]
 
 # --- find average semantic pointers (codes) for each label
-test_codes = forward(test_images, weights, biases)
-vocab_labels = np.unique(test_labels)
-vocab_codes = np.zeros((len(vocab_labels), test_codes.shape[-1]))
+train_codes = forward(train_images, weights, biases)
+vocab_labels = np.unique(train_labels)
+vocab_codes = np.zeros((len(vocab_labels), train_codes.shape[-1]))
 for i, label in enumerate(vocab_labels):
-    vocab_codes[i] = test_codes[test_labels.flatten() == label].mean(0)
+    vocab_codes[i] = train_codes[train_labels.flatten() == label].mean(0)
 
 vocab_codes /= norm(vocab_codes, axis=1, keepdims=True)
 
