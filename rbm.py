@@ -83,8 +83,6 @@ if not os.path.exists(neuron_params_file):
 # --- load and format neuron params
 neuron_params = dict(np.load(neuron_params_file))
 N = neuron_params.pop('N')
-for p in ['encoders', 'max_rates', 'intercepts']:
-    neuron_params[p] = Choice(neuron_params[p])
 neuron_params['radius'] = neuron_params['radius'].item()
 
 # --- create the model
@@ -96,7 +94,12 @@ with model:
     layers = []
     output = input_images
     for w, b in zip(weights[:-1], biases[:-1]):
-        layer = nengo.networks.EnsembleArray(N, b.size, **neuron_params)
+        layer = nengo.networks.EnsembleArray(N, b.size)
+
+        for key, value in neuron_params.items():
+            for ensemble in layer.ensembles:
+                setattr(ensemble, key, value)
+
         bias = nengo.Node(output=b)
         nengo.Connection(bias, layer.input, synapse=0)
 
