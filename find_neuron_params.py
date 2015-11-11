@@ -25,8 +25,7 @@ def encoders_rates_intercepts(seed):
 
 
 def residual(encoders, max_rates, intercepts, eval_points, show=False):
-    radius = 5
-    neurons = nengo.LIF(N)
+    neurons = nengo.LIF()
     gains, biases = neurons.gain_bias(max_rates, intercepts)
     A = neurons.rates(np.dot(eval_points, encoders.T), gains, biases)
     y = sigmoid_radius(eval_points)
